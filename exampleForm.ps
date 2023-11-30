@@ -1,6 +1,66 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
+# Parameters
+$authEndpoint = 'your_auth_endpoint'
+$postEndpoint = 'your_post_endpoint'
+$logFilePath = 'C:\Path\To\Log\File.txt'
+
+# Function to authenticate and get token
+function Authenticate($username, $password) {
+    $credentials = @{
+        username = $username
+        password = $password
+    }
+
+    try {
+        $response = Invoke-RestMethod -Uri $authEndpoint -Method Post -Body $credentials
+        return $response.Token
+    } catch {
+        return $null
+    }
+}
+
+# Function to process CSV
+function Process-CSV($filePath, $authToken) {
+    $csvData = Import-Csv $filePath
+    foreach ($row in $csvData) {
+        if ($pauseProcessing) {
+            while ($pauseProcessing) {
+                Start-Sleep -Milliseconds 100
+            }
+        }
+
+        # Log request
+        $requestLog = "Request - $($postEndpoint): $($row | Out-String)"
+        Add-Content -Path $logFilePath -Value $requestLog
+
+        try {
+            $response = Invoke-RestMethod -Uri $postEndpoint -Method Post -Headers @{ 'Authorization' = "Bearer $authToken" } -Body $row
+
+            # Log response
+            $responseLog = "Response - $($postEndpoint): $($response | Out-String)"
+            Add-Content -Path $logFilePath -Value $responseLog
+
+            $statusLabel.Text = "Status: Row $($csvData.IndexOf($row) + 1) - $($response.StatusCode)"
+            $form.Refresh()
+
+            # Add additional processing as needed
+
+            if ($stopProcessing) {
+                $statusLabel.Text = "Processing stopped"
+                $form.Refresh()
+                return
+            }
+        } catch {
+            $statusLabel.Text = "Error: Row $($csvData.IndexOf($row) + 1) - $_"
+            $form.Refresh()
+        }
+    }
+    $statusLabel.Text = "Processing complete"
+    $form.Refresh()
+}
+
 # Create form
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "CSV Processor"
@@ -39,12 +99,23 @@ $progressBar.Style = "Continuous"
 $progressBar.Location = New-Object System.Drawing.Point(10,110)
 $progressBar.Size = New-Object System.Drawing.Size(360,20)
 
-# Create button
+# Create buttons
+$authButton = New-Object System.Windows.Forms.Button
+$authButton.Text = "Authenticate"
+$authButton.Location = New-Object System.Drawing.Point(10,110)
+$authButton.Add_Click({
+    $authToken = Authenticate $usernameTextBox.Text $passwordTextBox.Text
+    if ($authToken -ne $null) {
+        $statusLabel.Text = "Authentication successful"
+    } else {
+        $statusLabel.Text = "Authentication failed"
+    }
+    $form.Refresh()
+})
+
 $processButton = New-Object System.Windows.Forms.Button
 $processButton.Text = "Process CSV"
 $processButton.Location = New-Object System.Drawing.Point(10,140)
-
-# Event handler for button click
 $processButton.Add_Click({
     $fileDialog = New-Object System.Windows.Forms.OpenFileDialog
     $fileDialog.Filter = "CSV files (*.csv)|*.csv"
@@ -52,48 +123,35 @@ $processButton.Add_Click({
 
     if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
         $csvFilePath = $fileDialog.FileName
-        $authToken = Authenticate $usernameTextBox.Text $passwordTextBox.Text
-
-        if ($authToken -ne $null) {
-            Process-CSV $csvFilePath $authToken
-        } else {
-            $statusLabel.Text = "Authentication failed"
+        if ($authToken -eq $null) {
+            $statusLabel.Text = "Please authenticate first"
+            $form.Refresh()
+            return
         }
+
+        $pauseProcessing = $false
+        $stopProcessing = $false
+        Process-CSV $csvFilePath $authToken
     }
 })
 
-# Function to authenticate and get token
-function Authenticate($username, $password) {
-    # Replace 'your_auth_endpoint' with the actual authentication endpoint
-    $authEndpoint = 'your_auth_endpoint'
-    $credentials = @{
-        username = $username
-        password = $password
-    }
+$pauseButton = New-Object System.Windows.Forms.Button
+$pauseButton.Text = "Pause"
+$pauseButton.Location = New-Object System.Drawing.Point(100,140)
+$pauseButton.Add_Click({
+    $pauseProcessing = $true
+    $statusLabel.Text = "Processing paused"
+    $form.Refresh()
+})
 
-    try {
-        $response = Invoke-RestMethod -Uri $authEndpoint -Method Post -Body $credentials
-        return $response.Token
-    } catch {
-        return $null
-    }
-}
-
-# Function to process CSV
-function Process-CSV($filePath, $authToken) {
-    # Read CSV and process each row
-    $csvData = Import-Csv $filePath
-    foreach ($row in $csvData) {
-        # Replace 'your_post_endpoint' with the actual POST endpoint
-        $response = Invoke-RestMethod -Uri 'your_post_endpoint' -Method Post -Headers @{ 'Authorization' = "Bearer $authToken" } -Body $row
-
-        # Update status
-        $statusLabel.Text = "Status: Row $($csvData.IndexOf($row) + 1) - $($response.StatusCode)"
-        $form.Refresh()
-
-        # Add additional processing as needed
-    }
-}
+$stopButton = New-Object System.Windows.Forms.Button
+$stopButton.Text = "Stop"
+$stopButton.Location = New-Object System.Drawing.Point(190,140)
+$stopButton.Add_Click({
+    $stopProcessing = $true
+    $statusLabel.Text = "Processing stopping..."
+    $form.Refresh()
+})
 
 # Add controls to form
 $form.Controls.Add($statusLabel)
@@ -102,7 +160,10 @@ $form.Controls.Add($passwordLabel)
 $form.Controls.Add($usernameTextBox)
 $form.Controls.Add($passwordTextBox)
 $form.Controls.Add($progressBar)
+$form.Controls.Add($authButton)
 $form.Controls.Add($processButton)
+$form.Controls.Add($pauseButton)
+$form.Controls.Add($stopButton)
 
 # Show the form
-[Windows.Markup.XamlLoader]::Load(($form.ShowDialog()))
+$form.ShowDialog()
