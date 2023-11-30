@@ -1,0 +1,108 @@
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+
+# Create form
+$form = New-Object System.Windows.Forms.Form
+$form.Text = "CSV Processor"
+$form.Size = New-Object System.Drawing.Size(400,250)
+$form.StartPosition = "CenterScreen"
+
+# Create labels
+$statusLabel = New-Object System.Windows.Forms.Label
+$statusLabel.Text = "Status:"
+$statusLabel.Location = New-Object System.Drawing.Point(10,20)
+$statusLabel.AutoSize = $true
+
+$usernameLabel = New-Object System.Windows.Forms.Label
+$usernameLabel.Text = "Username:"
+$usernameLabel.Location = New-Object System.Drawing.Point(10,50)
+$usernameLabel.AutoSize = $true
+
+$passwordLabel = New-Object System.Windows.Forms.Label
+$passwordLabel.Text = "Password:"
+$passwordLabel.Location = New-Object System.Drawing.Point(10,80)
+$passwordLabel.AutoSize = $true
+
+# Create textboxes for input
+$usernameTextBox = New-Object System.Windows.Forms.TextBox
+$usernameTextBox.Location = New-Object System.Drawing.Point(100,50)
+$usernameTextBox.Size = New-Object System.Drawing.Size(150,20)
+
+$passwordTextBox = New-Object System.Windows.Forms.TextBox
+$passwordTextBox.Location = New-Object System.Drawing.Point(100,80)
+$passwordTextBox.Size = New-Object System.Drawing.Size(150,20)
+$passwordTextBox.PasswordChar = '*' # Mask the password
+
+# Create progress bar
+$progressBar = New-Object System.Windows.Forms.ProgressBar
+$progressBar.Style = "Continuous"
+$progressBar.Location = New-Object System.Drawing.Point(10,110)
+$progressBar.Size = New-Object System.Drawing.Size(360,20)
+
+# Create button
+$processButton = New-Object System.Windows.Forms.Button
+$processButton.Text = "Process CSV"
+$processButton.Location = New-Object System.Drawing.Point(10,140)
+
+# Event handler for button click
+$processButton.Add_Click({
+    $fileDialog = New-Object System.Windows.Forms.OpenFileDialog
+    $fileDialog.Filter = "CSV files (*.csv)|*.csv"
+    $result = $fileDialog.ShowDialog()
+
+    if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+        $csvFilePath = $fileDialog.FileName
+        $authToken = Authenticate $usernameTextBox.Text $passwordTextBox.Text
+
+        if ($authToken -ne $null) {
+            Process-CSV $csvFilePath $authToken
+        } else {
+            $statusLabel.Text = "Authentication failed"
+        }
+    }
+})
+
+# Function to authenticate and get token
+function Authenticate($username, $password) {
+    # Replace 'your_auth_endpoint' with the actual authentication endpoint
+    $authEndpoint = 'your_auth_endpoint'
+    $credentials = @{
+        username = $username
+        password = $password
+    }
+
+    try {
+        $response = Invoke-RestMethod -Uri $authEndpoint -Method Post -Body $credentials
+        return $response.Token
+    } catch {
+        return $null
+    }
+}
+
+# Function to process CSV
+function Process-CSV($filePath, $authToken) {
+    # Read CSV and process each row
+    $csvData = Import-Csv $filePath
+    foreach ($row in $csvData) {
+        # Replace 'your_post_endpoint' with the actual POST endpoint
+        $response = Invoke-RestMethod -Uri 'your_post_endpoint' -Method Post -Headers @{ 'Authorization' = "Bearer $authToken" } -Body $row
+
+        # Update status
+        $statusLabel.Text = "Status: Row $($csvData.IndexOf($row) + 1) - $($response.StatusCode)"
+        $form.Refresh()
+
+        # Add additional processing as needed
+    }
+}
+
+# Add controls to form
+$form.Controls.Add($statusLabel)
+$form.Controls.Add($usernameLabel)
+$form.Controls.Add($passwordLabel)
+$form.Controls.Add($usernameTextBox)
+$form.Controls.Add($passwordTextBox)
+$form.Controls.Add($progressBar)
+$form.Controls.Add($processButton)
+
+# Show the form
+[Windows.Markup.XamlLoader]::Load(($form.ShowDialog()))
