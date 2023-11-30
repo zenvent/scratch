@@ -25,12 +25,6 @@ function Authenticate($username, $password) {
 function Process-CSV($filePath, $authToken) {
     $csvData = Import-Csv $filePath
     foreach ($row in $csvData) {
-        if ($pauseProcessing) {
-            while ($pauseProcessing) {
-                Start-Sleep -Milliseconds 100
-            }
-        }
-
         # Log request
         $requestLog = "Request - $($postEndpoint): $($row | Out-String)"
         Add-Content -Path $logFilePath -Value $requestLog
@@ -46,19 +40,11 @@ function Process-CSV($filePath, $authToken) {
             $form.Refresh()
 
             # Add additional processing as needed
-
-            if ($stopProcessing) {
-                $statusLabel.Text = "Processing stopped"
-                $form.Refresh()
-                return
-            }
         } catch {
             $statusLabel.Text = "Error: Row $($csvData.IndexOf($row) + 1) - $_"
             $form.Refresh()
         }
     }
-    $statusLabel.Text = "Processing complete"
-    $form.Refresh()
 }
 
 # Create form
@@ -129,28 +115,8 @@ $processButton.Add_Click({
             return
         }
 
-        $pauseProcessing = $false
-        $stopProcessing = $false
         Process-CSV $csvFilePath $authToken
     }
-})
-
-$pauseButton = New-Object System.Windows.Forms.Button
-$pauseButton.Text = "Pause"
-$pauseButton.Location = New-Object System.Drawing.Point(100,140)
-$pauseButton.Add_Click({
-    $pauseProcessing = $true
-    $statusLabel.Text = "Processing paused"
-    $form.Refresh()
-})
-
-$stopButton = New-Object System.Windows.Forms.Button
-$stopButton.Text = "Stop"
-$stopButton.Location = New-Object System.Drawing.Point(190,140)
-$stopButton.Add_Click({
-    $stopProcessing = $true
-    $statusLabel.Text = "Processing stopping..."
-    $form.Refresh()
 })
 
 # Add controls to form
@@ -162,8 +128,6 @@ $form.Controls.Add($passwordTextBox)
 $form.Controls.Add($progressBar)
 $form.Controls.Add($authButton)
 $form.Controls.Add($processButton)
-$form.Controls.Add($pauseButton)
-$form.Controls.Add($stopButton)
 
 # Show the form
 $form.ShowDialog()
